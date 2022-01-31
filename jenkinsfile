@@ -1,0 +1,77 @@
+node {
+    git url: 'https://github.com/jfrogdev/project-examples.git'
+
+    // Get Artifactory server instance, defined in the Artifactory Plugin administration page.
+    def server = Artifactory.server "SERVER_ID"
+
+    // Read the upload spec and upload files to Artifactory.
+    def downloadSpec =
+            '''{
+            "files": [
+                {
+                    "pattern": "libs-snapshot-local/*.zip",
+                    "target": "dependencies/",
+                    "props": "p1=v1;p2=v2"
+                }
+            ]
+        }'''
+
+    def buildInfo1 = server.download spec: downloadSpec
+
+    // Read the upload spec which was downloaded from github.
+    def uploadSpec =
+            '''{
+            "files": [
+                {
+                    "pattern": "resources/Kermit.*",
+                    "target": "libs-snapshot-local",
+                    "props": "p1=v1;p2=v2"
+                },
+                {
+                    "pattern": "resources/Frogger.*",
+                    "target": "libs-snapshot-local"
+                }
+            ]
+        }'''
+
+    // Upload to Artifactory.
+    def buildInfo2 = server.upload spec: uploadSpec
+
+    // Merge the upload and download build-info objects.
+    buildInfo1.append buildInfo2
+
+    // Publish the build to Artifactory
+    server.publishBuildInfo buildInfo1
+}
+Artifactory Gradle Build 
+Synopsis
+This is a simple demonstration of how to run a Gradle build, that resolves dependencies, upload artifacts and publish build info to Artifactory.
+Read the full documentation here.
+
+node {
+    // Get Artifactory server instance, defined in the Artifactory Plugin administration page.
+    def server = Artifactory.server "SERVER_ID"
+    // Create an Artifactory Gradle instance.
+    def rtGradle = Artifactory.newGradleBuild()
+    def buildInfo
+
+    stage('Clone sources') {
+        git url: 'https://github.com/jfrogdev/project-examples.git'
+    }
+
+    stage('Artifactory configuration') {
+        // Tool name from Jenkins configuration
+        rtGradle.tool = "Gradle-2.4"
+        // Set Artifactory repositories for dependencies resolution and artifacts deployment.
+        rtGradle.deployer repo:'ext-release-local', server: server
+        rtGradle.resolver repo:'remote-repos', server: server
+    }
+
+    stage('Gradle build') {
+        buildInfo = rtGradle.run rootDir: "gradle-examples/4/gradle-example-ci-server/", buildFile: 'build.gradle', tasks: 'clean artifactoryPublish'
+    }
+
+    stage('Publish build info') {
+        server.publishBuildInfo buildInfo
+    }
+}
